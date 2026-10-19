@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -193,4 +194,19 @@ func (s *Store) DeleteExpired() int {
 	}
 
 	return deleted
+}
+
+func (s *Store) RunCleanup(ctx context.Context) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.DeleteExpired()
+
+		case <-ctx.Done():
+			return
+		}
+	}
 }
