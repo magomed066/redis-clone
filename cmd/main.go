@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"io"
 	"log"
+	"math"
 	"net"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/magomed066/redis-clone/internal/store"
 )
@@ -110,6 +113,37 @@ func handleConnection(conn net.Conn, db *store.Store) {
 				} else {
 					response = encodeInteger(deleted)
 				}
+			}
+
+		case "EXPIRE":
+			if len(args) != 3 {
+				response = "-ERR wrong number of arguments for EXPIRE\r\n"
+				break
+			}
+
+			seconds, err := strconv.ParseInt(args[2], 10, 64)
+			if err != nil {
+				response = "-ERR seconds must be a valid integer\r\n"
+				break
+			}
+
+			// Check before multiplying to avoid overflowing time.Duration.
+			maxSeconds := int64(math.MaxInt64) / int64(time.Second)
+			if seconds > maxSeconds {
+				response = "-ERR expiration duration is too large\r\n"
+				break
+			}
+
+			// Zero and negative seconds mean immediate deletion.
+			var ttl time.Duration
+			if seconds > 0 {
+				ttl = time.Duration(seconds) * time.Second
+			}
+
+			if db.Expire(args[1], ttl) {
+				response = encodeInteger(1)
+			} else {
+				response = encodeInteger(0)
 			}
 
 		default:

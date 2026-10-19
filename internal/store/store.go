@@ -5,16 +5,22 @@ import (
 	"math"
 	"strconv"
 	"sync"
+	"time"
 )
+
+type entry struct {
+	value     string
+	expiresAt time.Time
+}
 
 type Store struct {
 	mu   sync.Mutex
-	data map[string]string
+	data map[string]entry
 }
 
 func NewStore() *Store {
 	return &Store{
-		data: make(map[string]string),
+		data: make(map[string]entry),
 	}
 }
 
@@ -22,24 +28,30 @@ func (s *Store) Set(key string, value string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.data[key] = value
+	s.data[key] = entry{
+		value: value,
+	}
 }
 
 func (s *Store) Get(key string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	val, ok := s.data[key]
-	return val, ok
+	item, exists := s.getLiveEntryLocked(key)
+	return item.value, exists
 }
 
 func (s *Store) Delete(key string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, ok := s.data[key]
+	_, exists := s.getLiveEntryLocked(key)
+	if !exists {
+		return false
+	}
+
 	delete(s.data, key)
-	return ok
+	return true
 }
 
 func (s *Store) DeleteMany(keys []string) int64 {
@@ -49,7 +61,7 @@ func (s *Store) DeleteMany(keys []string) int64 {
 	var deleted int64
 
 	for _, key := range keys {
-		if _, exists := s.data[key]; exists {
+		if _, exists := s.getLiveEntryLocked(key); exists {
 			delete(s.data, key)
 			deleted++
 		}
@@ -62,13 +74,15 @@ func (s *Store) Incr(key string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	val, exists := s.data[key]
+	val, exists := s.getLiveEntryLocked(key)
 	if !exists {
-		s.data[key] = "1"
+		s.data[key] = entry{
+			value: "1",
+		}
 		return 1, nil
 	}
 
-	parsedVal, err := strconv.ParseInt(val, 10, 64)
+	parsedVal, err := strconv.ParseInt(val.value, 10, 64)
 	if err != nil {
 		return 0, errors.New("value is not a valid int64")
 	}
@@ -78,7 +92,43 @@ func (s *Store) Incr(key string) (int64, error) {
 	}
 
 	newValue := parsedVal + 1
-	s.data[key] = strconv.FormatInt(newValue, 10)
+
+	val.value = strconv.FormatInt(newValue, 10)
+	s.data[key] = val
 
 	return newValue, nil
+}
+
+func (s *Store) getLiveEntryLocked(key string) (entry, bool) {
+	item, exists := s.data[key]
+	if !exists {
+		return entry{}, false
+	}
+
+	if !item.expiresAt.IsZero() && !time.Now().Before(item.expiresAt) {
+		delete(s.data, key)
+		return entry{}, false
+	}
+
+	return item, true
+}
+
+func (s *Store) Expire(key string, ttl time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	val, exists := s.getLiveEntryLocked(key)
+	if !exists {
+		return false
+	}
+
+	if ttl <= 0 {
+		delete(s.data, key)
+		return true
+	}
+
+	val.expiresAt = time.Now().Add(ttl)
+	s.data[key] = val
+
+	return true
 }
