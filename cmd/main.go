@@ -72,12 +72,43 @@ func handleConnection(conn net.Conn, db *store.Store) {
 			}
 
 		case "SET":
-			if len(args) != 3 {
-				response = "-ERR wrong number of arguments for SET\r\n"
-			} else {
+			if len(args) == 3 {
 				db.Set(args[1], args[2])
 				response = "+OK\r\n"
+				break
 			}
+
+			if len(args) != 5 {
+				response = "-ERR wrong number of arguments for SET\r\n"
+				break
+			}
+
+			if strings.ToUpper(args[3]) != "PX" {
+				response = "-ERR unsupported SET option\r\n"
+				break
+			}
+
+			milliseconds, err := strconv.ParseInt(args[4], 10, 64)
+			if err != nil {
+				response = "-ERR expiration must be a valid integer\r\n"
+				break
+			}
+
+			maxMilliseconds := int64(math.MaxInt64) / int64(time.Millisecond)
+			if milliseconds <= 0 || milliseconds > maxMilliseconds {
+				response = "-ERR invalid expiration time for SET\r\n"
+				break
+			}
+
+			ttl := time.Duration(milliseconds) * time.Millisecond
+
+			err = db.SetWithTTL(args[1], args[2], ttl)
+			if err != nil {
+				response = "-ERR " + err.Error() + "\r\n"
+				break
+			}
+
+			response = "+OK\r\n"
 
 		case "GET":
 			if len(args) != 2 {
@@ -144,6 +175,13 @@ func handleConnection(conn net.Conn, db *store.Store) {
 				response = encodeInteger(1)
 			} else {
 				response = encodeInteger(0)
+			}
+
+		case "TTL":
+			if len(args) != 2 {
+				response = "-ERR wrong number of arguments for TTL\r\n"
+			} else {
+				response = encodeInteger(db.TTL(args[1]))
 			}
 
 		default:

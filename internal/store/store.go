@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 	"sync"
@@ -131,4 +132,65 @@ func (s *Store) Expire(key string, ttl time.Duration) bool {
 	s.data[key] = val
 
 	return true
+}
+
+func (s *Store) TTL(key string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	val, exists := s.getLiveEntryLocked(key)
+	if !exists {
+		return -2
+	}
+
+	if val.expiresAt.IsZero() {
+		return -1
+	}
+
+	remaining := time.Until(val.expiresAt)
+
+	if remaining <= 0 {
+		delete(s.data, key)
+		return -2
+	}
+
+	return int64(remaining / time.Second)
+}
+
+func (s *Store) SetWithTTL(
+	key string,
+	value string,
+	ttl time.Duration,
+) error {
+	if ttl <= 0 {
+		return fmt.Errorf("ttl must be greater than zero")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.data[key] = entry{
+		value:     value,
+		expiresAt: time.Now().Add(ttl),
+	}
+
+	return nil
+}
+
+// Cleans up the keys that are not readed (in the background)
+func (s *Store) DeleteExpired() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	deleted := 0
+
+	for key, val := range s.data {
+		if !val.expiresAt.IsZero() && !now.Before(val.expiresAt) {
+			delete(s.data, key)
+			deleted++
+		}
+	}
+
+	return deleted
 }
