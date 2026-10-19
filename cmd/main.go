@@ -1,21 +1,52 @@
 package main
 
 import (
-	"github.com/magomed066/redis-clone/internal/store"
+	"bufio"
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"strings"
 )
 
 func main() {
-	store := store.NewStore()
+	listener, err := net.Listen("tcp", "127.0.0.1:6380")
+	if err != nil {
+		log.Fatal("Error listening:", err)
+	}
+	defer listener.Close()
 
-	store.Set("name", "Magich")
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Println("Error accepting conn:", err)
+			continue
+		}
 
-	// got, exists := store.Get("name")
+		go handleConnection(conn)
+	}
+}
 
-	// if !exists {
-	// 	panic("expected key to exist")
-	// }
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
 
-	// if got != "Magich" {
-	// 	t.Fatalf("got %q, want %q", got, "Magich")
-	// }
+	reader := bufio.NewReader(conn)
+
+	for {
+		message, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				log.Printf("Read error: %v", err)
+			}
+			return
+		}
+
+		ackMessage := strings.ToUpper(strings.TrimSpace(message))
+		response := fmt.Sprintf("Response: %s\n\n", ackMessage)
+
+		_, err = conn.Write([]byte(response))
+		if err != nil {
+			log.Printf("Server write error: %v", err)
+		}
+	}
 }
