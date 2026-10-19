@@ -16,8 +16,9 @@ type entry struct {
 }
 
 type Store struct {
-	mu   sync.Mutex
-	data map[string]entry
+	mu     sync.Mutex
+	saveMu sync.Mutex
+	data   map[string]entry
 }
 
 func NewStore() *Store {

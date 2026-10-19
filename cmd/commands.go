@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -143,6 +144,19 @@ func executeCommand(db *store.Store, args []string) string {
 			response = "-ERR wrong number of arguments for TTL\r\n"
 		} else {
 			response = encodeInteger(db.TTL(args[1]))
+		}
+
+	case "SAVE":
+		if len(args) != 1 {
+			response = "-ERR wrong number of arguments for SAVE\r\n"
+			break
+		}
+
+		if err := db.SaveSnapshot("snapshot.json"); err != nil {
+			log.Printf("Save snapshot: %v", err)
+			response = "-ERR could not save snapshot\r\n"
+		} else {
+			response = "+OK\r\n"
 		}
 
 	default:
