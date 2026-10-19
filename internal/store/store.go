@@ -42,6 +42,22 @@ func (s *Store) Delete(key string) bool {
 	return ok
 }
 
+func (s *Store) DeleteMany(keys []string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var deleted int64
+
+	for _, key := range keys {
+		if _, exists := s.data[key]; exists {
+			delete(s.data, key)
+			deleted++
+		}
+	}
+
+	return deleted
+}
+
 func (s *Store) Incr(key string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

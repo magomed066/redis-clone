@@ -88,6 +88,30 @@ func handleConnection(conn net.Conn, db *store.Store) {
 				}
 			}
 
+		case "INCR":
+			if len(args) != 2 {
+				response = "-ERR wrong number of arguments for INCR\r\n"
+			} else {
+				val, err := db.Incr(args[1])
+				if err != nil {
+					response = "-ERR " + err.Error() + "\r\n"
+				} else {
+					response = encodeInteger(val)
+				}
+			}
+
+		case "DEL":
+			if len(args) < 2 {
+				response = "-ERR wrong number of arguments for DEL\r\n"
+			} else {
+				deleted := db.DeleteMany(args[1:])
+				if deleted < 1 {
+					response = encodeInteger(0)
+				} else {
+					response = encodeInteger(deleted)
+				}
+			}
+
 		default:
 			response = "-ERR unknown command\r\n"
 		}
