@@ -4,9 +4,11 @@ import (
 	"errors"
 	"math"
 	"strconv"
+	"sync"
 )
 
 type Store struct {
+	mu   sync.Mutex
 	data map[string]string
 }
 
@@ -17,24 +19,36 @@ func NewStore() *Store {
 }
 
 func (s *Store) Set(key string, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.data[key] = value
 }
 
 func (s *Store) Get(key string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	val, ok := s.data[key]
 	return val, ok
 }
 
 func (s *Store) Delete(key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	_, ok := s.data[key]
 	delete(s.data, key)
 	return ok
 }
 
 func (s *Store) Incr(key string) (int64, error) {
-	val, exists := s.Get(key)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	val, exists := s.data[key]
 	if !exists {
-		s.Set(key, "1")
+		s.data[key] = "1"
 		return 1, nil
 	}
 
@@ -48,7 +62,7 @@ func (s *Store) Incr(key string) (int64, error) {
 	}
 
 	newValue := parsedVal + 1
-	s.Set(key, strconv.FormatInt(newValue, 10))
+	s.data[key] = strconv.FormatInt(newValue, 10)
 
 	return newValue, nil
 }

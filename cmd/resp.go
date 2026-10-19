@@ -93,3 +93,7 @@ func readCommand(reader *bufio.Reader) ([]string, error) {
 
 	return payload, nil
 }
+
+func encodeBulkString(value string) string {
+	return fmt.Sprintf("$%d\r\n%s\r\n", len(value), value)
+}

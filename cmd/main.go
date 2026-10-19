@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"strings"
+
+	"github.com/magomed066/redis-clone/internal/store"
 )
 
 func main() {
@@ -15,6 +17,8 @@ func main() {
 	}
 	defer listener.Close()
 
+	db := store.NewStore()
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -22,11 +26,11 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn)
+		go handleConnection(conn, db)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, db *store.Store) {
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
@@ -55,6 +59,33 @@ func handleConnection(conn net.Conn) {
 				response = "-ERR PING arguments not supported yet\r\n"
 			} else {
 				response = "+PONG\r\n"
+			}
+
+		case "ECHO":
+			if len(args) != 2 {
+				response = "-ERR wrong number of arguments for ECHO\r\n"
+			} else {
+				response = encodeBulkString(args[1])
+			}
+
+		case "SET":
+			if len(args) != 3 {
+				response = "-ERR wrong number of arguments for SET\r\n"
+			} else {
+				db.Set(args[1], args[2])
+				response = "+OK\r\n"
+			}
+
+		case "GET":
+			if len(args) != 2 {
+				response = "-ERR wrong number of arguments for GET\r\n"
+			} else {
+				val, exists := db.Get(args[1])
+				if !exists {
+					response = "$-1\r\n"
+				} else {
+					response = encodeBulkString(val)
+				}
 			}
 
 		default:
